@@ -10,9 +10,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import pro.sky.telegrambot.entity.NotificationTask;
-import pro.sky.telegrambot.service.NotificationTaskService;
+import pro.sky.telegrambot.repository.NotificationTaskRepository;
+
 
 import javax.annotation.PostConstruct;
 import java.time.DateTimeException;
@@ -23,22 +26,16 @@ import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static java.time.LocalDateTime.parse;
+
 
 @Service
+@EnableScheduling
 public class TelegramBotUpdatesListener implements UpdatesListener {
-    private NotificationTaskService notificationTaskService;
+
     private Logger logger = LoggerFactory.getLogger(TelegramBotUpdatesListener.class);
 
-    private final Pattern pattern = Pattern
-            .compile("(\\d{1,2}\\.\\d{1,2}\\.\\d{4} \\d{1,2}:\\d{2})\\s+([А-я\\d\\s.,!?:]+)");
-
-    private final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
-
-    public TelegramBotUpdatesListener(NotificationTaskService notificationTaskService, TelegramBot telegramBot) {
-        this.notificationTaskService = notificationTaskService;
-        this.telegramBot = telegramBot;
-    }
+    @Autowired
+    private NotificationTaskRepository notificationTaskRepository;
 
     @Autowired
     private TelegramBot telegramBot;
@@ -50,67 +47,56 @@ public class TelegramBotUpdatesListener implements UpdatesListener {
 
     @Override
     public int process(List<Update> updates) {
-        try {
-            updates.forEach(update -> {
-                logger.info("Processing update: {}", update);
+        updates.forEach(update -> {
+            logger.info("Processing update: {}", update);
+            String messageText = update.message().text();
+            Long chatId = update.message().chat().id();
+            String name = update.message().chat().firstName();
 
-                Message message = update.message();
-                Long chatId = message.from().id();
-                String text = message.text();
+            Pattern pattern = Pattern.compile("([0-9\\.\\:\\s]{16})(\\s)([\\W+]+)");
+            Matcher matcher = pattern.matcher(messageText);
 
-                if ("/start".equals(text)) {
-                    sendMessage(chatId, "Привет!\n" +
-                            "Я помогу тебе запланировать задачу.\n" +
-                            "Отправь ее в формате: \n" +
-                            "20.08.2023 12:32 ");
-                } else
-                    if (text != null)
-                {
-                    Matcher matcher = pattern.matcher(text);
 
-                    if (matcher.find())
-                    {
-                        LocalDateTime dateTime = parse(matcher.group(1));
+            switch (messageText) {
+                case "/start":
+                    String textToSend = "Hi, " + name + ", Привет";
+                    SendMessage message = new SendMessage(chatId, textToSend);
+                    SendResponse response = telegramBot.execute(message);
+                    break;
+                default:
 
-                        if (Objects.isNull(dateTime)) {
-                            sendMessage(chatId, "Некорректный формат даты и/или времени!");
-                        } else {
-                            String txt = matcher.group(2);
-                            NotificationTask notificationTask = new NotificationTask();
-                            notificationTask.setChatId(chatId);
-                            notificationTask.setMessage(txt);
-                            notificationTask.setDateTime(dateTime);
-                            notificationTaskService.save(notificationTask);
-                            sendMessage(chatId, "Задача успешно запланирована!");
-                        }
-                    } else {
-                        sendMessage(chatId, "Некорректный формат сообщения!");
+                    if (matcher.matches()) {
+                        String textToSend2 = "Сохранение";
+                        SendMessage message2 = new SendMessage(chatId, textToSend2);
+                        SendResponse response2 = telegramBot.execute(message2);
+                        save(update, matcher);
                     }
-                }
+            }
 
-            });
-        } catch (Exception e) {
-            logger.error(e.getMessage(), e);
-        }
+        });
         return UpdatesListener.CONFIRMED_UPDATES_ALL;
     }
 
-    @Nullable
-    private LocalDateTime parse(String dateTime) {
+    private void save(Update update, Matcher matcher) {
+        NotificationTask notificationTask = new NotificationTask();
+        notificationTask.setChatId(update.message().chat().id());
+        notificationTask.setFirstName(update.message().chat().firstName());
+        notificationTask.setNotificationTime(LocalDateTime.parse(matcher.group(1),
 
-        try {
-            return LocalDateTime.parse(dateTime, dateTimeFormatter);
-        } catch (DateTimeException e) {
-            return null;
-        }
+                DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")));
+        notificationTask.setNotificationText(matcher.group(3));
+
+        notificationTaskRepository.save(notificationTask);
     }
 
-    private void sendMessage(long chatId, String message) {
-        SendMessage sendMessage = new SendMessage(chatId, message);
-        SendResponse sendResponse = telegramBot.execute(sendMessage);
-        if (!sendResponse.isOk()) {
-            logger.error("Error during sending message: {}", sendResponse.description());
-        }
+    @Scheduled(cron = "0 0/1 * * * *")
+    public void findNotificationTaskByTime() {
+        List<NotificationTask> notificationList = notificationTaskRepository.findAllNotificationByCurrentDate();
+        notificationList.stream().forEach(e -> {
+            SendMessage message = new SendMessage(e.getChatId(), e.getNotificationText());
+            telegramBot.execute(message);
+        });
     }
+
 
 }

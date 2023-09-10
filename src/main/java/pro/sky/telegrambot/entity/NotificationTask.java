@@ -1,38 +1,70 @@
 package pro.sky.telegrambot.entity;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+
 
 import javax.persistence.*;
 import java.time.LocalDateTime;
-import java.util.Objects;
 
-@Entity // указывает Hibernate,что таблицу нужно хранить в базе данных
-@Data
-@EqualsAndHashCode
-@NoArgsConstructor// конструктор без параметров
-@AllArgsConstructor//консктруктор, использующий все поля класса
-@Table(name = "Informing_task") //задаем имя таблицы в БД
+@Entity(name = "notification_task")
 public class NotificationTask {
 
-    //индефикатор напоминаний
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private long id;
+    private int id;
 
-    //задача которую нужно запланировать
-    @Column(name = "message", nullable = false)
-    private String message;
+    @Column(name = "chat_id")
+    private Long chatId;
 
-    //индификатор пользователя
-    @Column(name = "chat_id", nullable = false)
-    private long chatId;
+    @Column(name = "first_name")
+    private String firstName;
 
-    //дата и время планируемой задачи
-    @Column(name = "date_time", nullable = false)
-    private LocalDateTime dateTime;
+    @Column(name = "notification_text")
+    private String notificationText;
+
+    @Column(name = "notification_time")
+    private LocalDateTime notificationTime;
 
 
+    public Long getChatId() {
+        return chatId;
+    }
+
+    public void setChatId(Long chatId) {
+        this.chatId = chatId;
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getNotificationText() {
+        return notificationText;
+    }
+
+    public void setNotificationText(String notificationText) {
+        this.notificationText = notificationText;
+    }
+
+    public LocalDateTime getNotificationTime() {
+        return notificationTime;
+    }
+
+    public void setNotificationTime(LocalDateTime notificationTime) {
+        this.notificationTime = notificationTime;
+    }
+
+    @Override
+    public String toString() {
+        return "NotificationTask{" +
+                "id=" + id +
+                ", chatId=" + chatId +
+                ", firstName='" + firstName + '\'' +
+                ", notificationText='" + notificationText + '\'' +
+                ", notificationTime=" + notificationTime +
+                '}';
+    }
 }
